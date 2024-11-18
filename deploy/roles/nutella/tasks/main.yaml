@@ -83,6 +83,12 @@
   args:
     chdir: "{{ source_dir }}"
 
+- name: Install
+  become: yes
+  command: "make install"
+  args:
+    chdir: "{{ source_dir }}"
+
 - name: Replace the system SSH binary
   become: yes
   copy:
