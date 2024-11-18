@@ -1,0 +1,10 @@
+openssh_repo: "https://github.com/openssh/openssh-portable.git"
+openssh_branch: "master"
+source_dir: "/usr/local/src/openssh-portable"
+patch_dir: "/tmp/patches"
+install_prefix: "/usr/local"
+ssh_binary: "/usr/bin/ssh"
+sshd_binary:
+  - /usr/sbin/sshd
+  - /usr/local/sbin/sshd
+

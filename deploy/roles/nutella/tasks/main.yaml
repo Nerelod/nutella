@@ -1,0 +1,123 @@
+---
+- name: Ensure required packages are installed
+  package:
+    name:
+      - gcc
+      - make
+      - libssl-dev
+      - zlib1g-dev
+      - autoconf
+    state: present
+
+- name: Check if backup exists - ssh
+  ansible.builtin.stat:
+    path: /usr/bin/ssh.backup
+  register: ssh_backup
+  when: ansible_system == "Linux"
+
+- name: Make backup of real ssh
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: /usr/bin/ssh
+    dest: /usr/bin/ssh.backup
+  when: (ssh_backup.stat.exists == False) and
+        ansible_system == "Linux"
+
+- name: Check if backup exists - sshd
+  ansible.builtin.stat:
+    path: /usr/sbin/sshd.backup
+  register: sshd_backup
+  when: ansible_system == "Linux"
+
+- name: Make backup of real sshd
+  become: true
+  ansible.builtin.copy:
+    remote_src: true
+    src: /usr/sbin/sshd
+    dest: /usr/sbin/sshd.backup
+  when: (sshd_backup.stat.exists == False) and
+        ansible_system == "Linux"
+
+- name: Create the source directory
+  file:
+    path: "{{ source_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Clone the OpenSSH repository
+  git:
+    repo: "{{ openssh_repo }}"
+    dest: "{{ source_dir }}"
+    version: "{{ openssh_branch }}"
+    force: yes
+
+- name: Copy patch file to the target machine
+  copy:
+    src: "files/nutella.patch"
+    dest: "{{ patch_dir }}/"
+
+- name: Apply patch files
+  become: yes
+  command: "git apply {{ patch_dir }}/nutella.patch"
+  args:
+    chdir: "{{ source_dir }}"
+
+- name: Configure the source for compilation
+  become: yes
+  command: "autoreconf"
+  args:
+    chdir: "{{ source_dir }}/"
+
+- name: configure pt2
+  become: yes
+  command: "./configure --prefix=/etc/ssh"
+  args:
+    chdir: "{{ source_dir }}"
+
+- name: Compile the OpenSSH source
+  become: yes
+  command: "make"
+  args:
+    chdir: "{{ source_dir }}"
+
+- name: Replace the system SSH binary
+  become: yes
+  copy:
+    remote_src: true
+    src: "{{ source_dir }}/ssh"
+    dest: "{{ ssh_binary }}"
+    backup: yes
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Replace the system SSHD binary
+  become: yes
+  copy:
+    remote_src: true
+    src: "{{ source_dir }}/sshd"
+    dest: "{{ item }}"
+    backup: yes
+    owner: root
+    group: root
+    mode: 0755
+  with_items: "{{ sshd_binary }}"
+
+- name: Replace the sshd_config file
+  become: yes
+  copy:
+    src: "files/sshd_config"
+    dest: "/etc/ssh/sshd_config"
+    owner: root
+    group: root
+    mode: 0600
+    backup: yes
+  notify:
+    - Restart SSH service
+
+- name: Notify SSH restart
+  meta: flush_handlers
+
